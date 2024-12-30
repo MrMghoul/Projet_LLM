@@ -3,14 +3,18 @@
 Service principal gérant les interactions avec le modèle de langage
 Compatible avec les fonctionnalités du TP1 et du TP2
 """
+from datetime import datetime
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.runnables.history import RunnableWithMessageHistory
-from services.memory import InMemoryHistory
+from services.tools import AssistantTools
+from services.memory import EnhancedMemoryHistory
+from services.chain import SummaryService
 import os
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
+
 
 class LLMService:
     """
@@ -45,12 +49,26 @@ class LLMService:
             input_messages_key="question",
             history_messages_key="history"
         )
+
+        self.summary_service = SummaryService(self.llm)
+        self.tools = AssistantTools(self.llm)
+        #self.session_manager = SessionManager()
     
     def _get_session_history(self, session_id: str) -> BaseChatMessageHistory:
         """Récupère ou crée l'historique pour une session donnée"""
         if session_id not in self.conversation_store:
-            self.conversation_store[session_id] = InMemoryHistory()
+            self.conversation_store[session_id] = EnhancedMemoryHistory()
         return self.conversation_store[session_id]
+    
+    def cleanup_inactive_sessions(self):
+        """Nettoie les sessions inactives"""
+        current_time = datetime.now()
+        for session_id, history in list(self.conversation_store.items()):
+            if not history.is_active():
+                del self.conversation_store[session_id]
+
+    async def process_with_tools(self, query: str) -> str:
+        return await self.tools.process_request(query)
 
     async def generate_response(self, 
                               message: str, 
@@ -96,33 +114,5 @@ class LLMService:
         return []
 
 
-    async def generate_summary(self, 
-                              message: str, 
-                              context: Optional[List[Dict[str, str]]] = None,
-                              size: Optional[int] = 100,
-                              session_id: Optional[str] = None) -> str:
-        """
-        Méthode unifiée pour générer des réponses
-        Supporte les deux modes : avec contexte (TP1) et avec historique (TP2)
-        """
-        if session_id:
-            # Mode TP2 avec historique
-            response = await self.chain_with_history.ainvoke(
-                {"question": message},
-                config={"configurable": {"session_id": session_id}}
-            )
-            return response.content
-        else:
-            # Mode TP1 avec contexte explicite
-            messages = [SystemMessage(content="Vous êtes un assistant utile et concis.")]
-            
-            if context:
-                for msg in context:
-                    if msg["role"] == "user":
-                        messages.append(HumanMessage(content=msg["content"]))
-                    elif msg["role"] == "assistant":
-                        messages.append(AIMessage(content=msg["content"]))
-            
-            messages.append(HumanMessage(content=message))
-            response = await self.llm.agenerate([messages])
-            return response.generations[0][0].text
+    async def generate_summary(self, message: str) -> Dict[str, Any]:
+        return await self.summary_service.generate_summary(message)
