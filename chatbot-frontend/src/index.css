@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-gray-900 text-gray-100;
+  margin: 0;
+  padding: 0;
+  height: 100vh;
+  overflow: hidden; /* Empêche le défilement */
+}
+
+.container {
+  @apply max-w-7xl mx-auto p-4;
+  height: calc(100vh - 2rem); /* Ajuste la hauteur pour inclure une marge */
+  margin: 5rem; /* Ajoute une marge autour du conteneur */
+}
+
+h2 {
+  @apply text-lg font-semibold mb-4;
+}
+
+button {
+  @apply w-full text-left px-3 py-2 rounded-lg;
+}
+
+button:hover {
+  @apply bg-gray-700;
+}
+
+button.active {
+  @apply bg-blue-700 text-white;
+}

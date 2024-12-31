@@ -1,21 +1,14 @@
-# services/llm_service.py
-"""
-Service principal gérant les interactions avec le modèle de langage
-Compatible avec les fonctionnalités du TP1 et du TP2
-"""
+from typing import List, Dict, Optional
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from services.memory import InMemoryHistory
+from services.mongo_service import MongoService
 import os
-from typing import List, Dict, Optional
 
 class LLMService:
-    """
-    Service LLM unifié supportant à la fois les fonctionnalités du TP1 et du TP2
-    """
     def __init__(self):
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
@@ -45,6 +38,7 @@ class LLMService:
             input_messages_key="question",
             history_messages_key="history"
         )
+        self.mongo_service = MongoService()
     
     def _get_session_history(self, session_id: str) -> BaseChatMessageHistory:
         """Récupère ou crée l'historique pour une session donnée"""
@@ -52,45 +46,40 @@ class LLMService:
             self.conversation_store[session_id] = InMemoryHistory()
         return self.conversation_store[session_id]
 
-    async def generate_response(self, 
-                              message: str, 
-                              context: Optional[List[Dict[str, str]]] = None,
-                              session_id: Optional[str] = None) -> str:
-        """
-        Méthode unifiée pour générer des réponses
-        Supporte les deux modes : avec contexte (TP1) et avec historique (TP2)
-        """
-        if session_id:
-            # Mode TP2 avec historique
-            response = await self.chain_with_history.ainvoke(
-                {"question": message},
-                config={"configurable": {"session_id": session_id}}
-            )
-            return response.content
-        else:
-            # Mode TP1 avec contexte explicite
-            messages = [SystemMessage(content="Vous êtes un assistant utile et concis.")]
-            
-            if context:
-                for msg in context:
-                    if msg["role"] == "user":
-                        messages.append(HumanMessage(content=msg["content"]))
-                    elif msg["role"] == "assistant":
-                        messages.append(AIMessage(content=msg["content"]))
-            
-            messages.append(HumanMessage(content=message))
-            response = await self.llm.agenerate([messages])
-            return response.generations[0][0].text
+    async def generate_response(self, message: str, session_id: Optional[str] = None) -> str:
+        """Génère une réponse et sauvegarde dans MongoDB"""
+        # Récupération de l'historique depuis MongoDB
+        history = await self.mongo_service.get_conversation_history(session_id)
 
-    def get_conversation_history(self, session_id: str) -> List[Dict[str, str]]:
-        """Récupère l'historique d'une conversation spécifique"""
-        if session_id in self.conversation_store:
-            history = self.conversation_store[session_id].messages
-            return [
-                {
-                    "role": "user" if isinstance(msg, HumanMessage) else "assistant",
-                    "content": msg.content
-                }
-                for msg in history
-            ]
-        return []
+        # Conversion de l'historique en messages LangChain
+        messages = [SystemMessage(content="Vous êtes un assistant utile et concis.")]
+        for msg in history:
+            if msg["role"] == "user":
+                messages.append(HumanMessage(content=msg["content"]))
+            elif msg["role"] == "assistant":
+                messages.append(AIMessage(content=msg["content"]))
+    
+        # Ajout du nouveau message
+        messages.append(HumanMessage(content=message))
+
+        # Génération de la réponse
+        response = await self.llm.agenerate([messages])
+        response_text = response.generations[0][0].text
+
+        # Sauvegarde des messages dans MongoDB
+        await self.mongo_service.save_message(session_id, "user", message)
+        await self.mongo_service.save_message(session_id, "assistant", response_text)
+    
+        return response_text
+
+    async def get_conversation_history(self, session_id: str) -> List[Dict]:
+        """Récupère l'historique d'une conversation"""
+        return await self.mongo_service.get_conversation_history(session_id)
+    
+    async def get_all_sessions(self) -> List[str]:
+        """Récupère toutes les sessions depuis MongoDB"""
+        return await self.mongo_service.get_all_sessions()
+
+    async def delete_conversation(self, session_id: str) -> bool:
+        """Supprime une conversation"""
+        return await self.mongo_service.delete_conversation(session_id)
