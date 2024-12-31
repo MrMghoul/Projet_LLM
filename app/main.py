@@ -4,8 +4,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.router import router as api_router
 from services.llm_service import LLMService
 import uvicorn
+import logging
 
 load_dotenv()
+
+logging.basicConfig(level=logging.INFO)
 
 app = FastAPI(
     title="Agent conversationnel",

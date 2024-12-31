@@ -12,6 +12,7 @@ from langchain_core.runnables.history import RunnableWithMessageHistory
 from services.tools import AssistantTools
 from services.memory import EnhancedMemoryHistory
 from services.chain import SummaryService
+from services.mongo_service import MongoService
 import os
 from typing import List, Dict, Optional, Any
 
@@ -53,6 +54,7 @@ class LLMService:
         self.summary_service = SummaryService(self.llm)
         self.tools = AssistantTools(self.llm)
         #self.session_manager = SessionManager()
+        self.mongo_service = MongoService()
     
     def _get_session_history(self, session_id: str) -> BaseChatMessageHistory:
         """Récupère ou crée l'historique pour une session donnée"""
@@ -71,20 +73,38 @@ class LLMService:
         return await self.tools.process_request(query)
 
     async def generate_response(self, 
-                              message: str, 
-                              context: Optional[List[Dict[str, str]]] = None,
-                              session_id: Optional[str] = None) -> str:
-        """
-        Méthode unifiée pour générer des réponses
-        Supporte les deux modes : avec contexte (TP1) et avec historique (TP2)
-        """
+                            message: str, 
+                            context: Optional[List[Dict[str, str]]] = None,
+                            session_id: Optional[str] = None) -> str:
+        
         if session_id:
-            # Mode TP2 avec historique
-            response = await self.chain_with_history.ainvoke(
-                {"question": message},
-                config={"configurable": {"session_id": session_id}}
-            )
-            return response.content
+            # Mode TP2 avec historique, récupération depuis MongoDB
+            try:
+                history = await self.mongo_service.get_conversation_history(session_id)
+                messages = [SystemMessage(content="Vous êtes un assistant utile et concis.")]
+                
+                # Conversion de l'historique en messages LangChain
+                for msg in history:
+                    if msg["role"] == "user":
+                        messages.append(HumanMessage(content=msg["content"]))
+                    elif msg["role"] == "assistant":
+                        messages.append(AIMessage(content=msg["content"]))
+                
+                # Ajout du nouveau message
+                messages.append(HumanMessage(content=message))
+                
+                # Génération de la réponse
+                response = await self.llm.agenerate([messages])
+                response_text = response.generations[0][0].text
+
+                # Sauvegarde des messages dans MongoDB
+                await self.mongo_service.save_message(session_id, "user", message)
+                await self.mongo_service.save_message(session_id, "assistant", response_text)
+                return response_text
+
+            except Exception as e:
+                raise RuntimeError(f"Erreur lors de la gestion du mode historique : {e}")
+
         else:
             # Mode TP1 avec contexte explicite
             messages = [SystemMessage(content="Vous êtes un assistant utile et concis.")]
@@ -97,8 +117,26 @@ class LLMService:
                         messages.append(AIMessage(content=msg["content"]))
             
             messages.append(HumanMessage(content=message))
-            response = await self.llm.agenerate([messages])
-            return response.generations[0][0].text
+
+            # Génération de la réponse sans historique MongoDB
+            try:
+                response = await self.llm.agenerate([messages])
+                return response.generations[0][0].text
+            except Exception as e:
+                raise RuntimeError(f"Erreur lors de la génération de réponse : {e}")
+
+    async def get_conversation_history(self, session_id: str) -> List[Dict]:
+        """Récupère l'historique d'une conversation"""
+        return await self.mongo_service.get_conversation_history(session_id)
+    
+    async def get_all_sessions(self) -> List[str]:
+        """Récupère toutes les sessions depuis MongoDB"""
+        return await self.mongo_service.get_all_sessions()
+
+    async def delete_conversation(self, session_id: str) -> bool:
+        """Supprime une conversation"""
+        return await self.mongo_service.delete_conversation(session_id)
+    
 
     def get_conversation_history(self, session_id: str) -> List[Dict[str, str]]:
         """Récupère l'historique d'une conversation spécifique"""
