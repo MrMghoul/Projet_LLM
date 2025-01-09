@@ -4,6 +4,7 @@ from typing import Any, List, Dict, Optional
 from models.conversation import Conversation, Message
 from core.config import settings
 import logging
+from bson import ObjectId
 
 class MongoService:
     def __init__(self):
@@ -55,3 +56,19 @@ class MongoService:
         cursor = self.conversations.find({}, {"session_id": 1})
         sessions = await cursor.to_list(length=None)
         return [session["session_id"] for session in sessions]
+    
+    async def get_all_patients(self) -> List[Dict]:
+        """Récupère tous les patients"""
+        cursor = self.db["patient"].find({})
+        patients = await cursor.to_list(length=None)
+        for patient in patients:
+            patient["_id"] = str(patient["_id"])
+        return patients
+
+    async def get_patient_by_id(self, patient_id: str) -> Optional[Dict]:
+        """Récupère un patient par son ID"""
+        patient = await self.db["patient"].find_one({"_id": ObjectId(patient_id)})
+        if patient:
+            patient["_id"] = str(patient["_id"])
+        return patient
+    
