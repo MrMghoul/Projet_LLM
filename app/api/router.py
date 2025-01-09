@@ -1,5 +1,13 @@
 from fastapi import APIRouter
+from api.endpoints import chat
+<<<<<<< Updated upstream
+=======
+from api.endpoints import summarize
+from api.endpoints import memory
+from api.endpoints import tools
 from api.endpoints import chat, summarize, memory, tools, patient
+
+>>>>>>> Stashed changes
 
 router = APIRouter()
 
