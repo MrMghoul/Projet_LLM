@@ -72,3 +72,10 @@ class MongoService:
             patient["_id"] = str(patient["_id"])
         return patient
     
+    async def get_patient_by_name(self, first_name: str, last_name: str) -> Optional[Dict]:
+        """Récupère un patient par son prénom et nom"""
+        patient = await self.db["patient"].find_one({"prenom": first_name, "nom": last_name})
+        if patient:
+            patient["_id"] = str(patient["_id"])
+        return patient
+    
