@@ -46,17 +46,17 @@ class MongoService:
         logging.info(f"Aucune conversation trouvée pour session_id: {session_id}")
         return []
 
-
     async def delete_conversation(self, session_id: str) -> bool:
         """Supprime une conversation"""
         result = await self.conversations.delete_one({"session_id": session_id})
         return result.deleted_count > 0
+
     async def get_all_sessions(self) -> List[str]:
         """Récupère tous les IDs de session"""
         cursor = self.conversations.find({}, {"session_id": 1})
         sessions = await cursor.to_list(length=None)
         return [session["session_id"] for session in sessions]
-    
+
     async def get_all_patients(self) -> List[Dict]:
         """Récupère tous les patients"""
         cursor = self.db["patient"].find({})
@@ -71,4 +71,10 @@ class MongoService:
         if patient:
             patient["_id"] = str(patient["_id"])
         return patient
-    
+
+    async def get_patient_by_name(self, nom: str, prenom: str) -> Optional[Dict]:
+        """Récupère un patient par son nom et prénom"""
+        patient = await self.db["patient"].find_one({"nom": nom, "prenom": prenom})
+        if patient:
+            patient["_id"] = str(patient["_id"])
+        return patient

@@ -154,3 +154,17 @@ class LLMService:
 
     async def generate_summary(self, message: str) -> Dict[str, Any]:
         return await self.summary_service.generate_summary(message)
+
+    async def generate_patient_response(self, patient: Dict[str, Any], question: str) -> str:
+        """Génère une réponse basée sur les informations du patient"""
+        messages = [
+            SystemMessage(content="Vous êtes un assistant médical."),
+            HumanMessage(content=f"Voici les informations du patient : {patient}"),
+            HumanMessage(content=question)
+        ]
+        
+        try:
+            response = await self.llm.agenerate([messages])
+            return response.generations[0][0].text
+        except Exception as e:
+            raise RuntimeError(f"Erreur lors de la génération de réponse : {e}")
