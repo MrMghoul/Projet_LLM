@@ -1,4 +1,5 @@
 import re
+import spacy
 from fastapi import APIRouter, HTTPException
 from typing import List, Dict
 from models.patient import Patient
@@ -10,6 +11,8 @@ import re
 router = APIRouter()
 mongo_service = MongoService()
 llm_service = LLMService()
+
+nlp = spacy.load("fr_core_news_md")
 
 @router.get("/patients", response_model=List[Patient])
 async def get_patients() -> List[Patient]:
@@ -45,11 +48,17 @@ async def get_patient_by_name(nom: str, prenom: str) -> Patient:
         raise HTTPException(status_code=500, detail=str(e))
 
 def extract_name_and_surname(question: str) -> (str, str):
-    """Extrait le nom et le prénom de la question"""
-    # Exemple simple d'extraction de nom et prénom
-    match = re.search(r"\b([A-Z][a-z]+)\s+([A-Z][a-z]+)\b", question)
-    if match:
-        return match.group(1), match.group(2)
+    """Extrait le nom et le prénom de la question en utilisant spaCy"""
+    doc = nlp(question)
+    print(f"Entités détectées : {[ent.text for ent in doc.ents]}")
+    names = [ent.text for ent in doc.ents if ent.label_ == "PER"]
+    if len(names) == 1:
+        # Si une seule entité est détectée, essayer de la diviser en prénom et nom
+        parts = names[0].split()
+        if len(parts) == 2:
+            return parts[0].capitalize(), parts[1].capitalize()
+    elif len(names) >= 2:
+        return names[0].capitalize(), names[1].capitalize()
     return None, None
 
 @router.post("/patients/query", response_model=Dict[str, str])
@@ -62,9 +71,14 @@ async def query_patient_info(question: str) -> Dict[str, str]:
         if not nom or not prenom:
             raise HTTPException(status_code=400, detail="Nom et prénom non trouvés dans la question")
         
+        # Essayer de trouver le patient avec le nom et prénom extraits
         patient = await mongo_service.get_patient_by_name(nom, prenom)
-        print(f"Patient trouvé: {patient}")  # Ajout de console.log
-
+        
+        # Si le patient n'est pas trouvé, inverser le nom et le prénom et refaire la recherche
+        if not patient:
+            print(f"Patient non trouvé avec {nom} {prenom}, tentative avec {prenom} {nom}")  # Ajout de console.log
+            patient = await mongo_service.get_patient_by_name(prenom, nom)
+        
         if not patient:
             raise HTTPException(status_code=404, detail="Patient not found")
         

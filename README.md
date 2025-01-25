@@ -182,3 +182,30 @@ curl -X 'POST' \
 - [Documentation FastAPI](https://fastapi.tiangolo.com/)
 - [Documentation LangChain](https://python.langchain.com/)
 - [API OpenAI](https://platform.openai.com/docs/api-reference)
+
+
+
+
+
+
+app/
+├── api/ # Contient les endpoints de l'API.
+│   ├── endpoints/
+│   │   ├── chat.py # Endpoints pour gérer les conversations.
+│   │   ├── summarize.py # Endpoints pour générer des résumés de texte.
+│   │   ├── memory.py # Endpoints pour gérer la mémoire des sessions de conversation.
+│   │   ├── tools.py # Endpoints pour utiliser des outils spécifiques.
+│   └── router.py # Routeur principal pour inclure tous les endpoints de l'API.
+├── core/
+│   └── config.py # Configuration de l'application, y compris les paramètres de la base de données.
+├── models/
+│   ├── chat.py # Modèles Pydantic pour la validation des données de chat .
+│   ├── conversation.py # Modèles Pydantic pour la structure des conversations et des messages.
+│   ├── summary.py # Modèles Pydantic pour la validation des données de résumé.
+├── services/
+│   ├── llm_service.py # Service principal pour gérer les interactions avec le LLM.
+│   ├── memory.py # Service pour gérer la mémoire des conversations.
+│   ├── mongo_service.py # Service pour interagir avec la base de données MongoDB.
+│   ├── tools.py # Service pour initialiser et utiliser les outils de l'agent.
+│   ├── chain.py # Service pour gérer les chaînes de traitement des résumés.
+├── main.py # Point d'entrée de l'application, configure et lance le serveur FastAPI.
