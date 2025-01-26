@@ -1,7 +1,7 @@
 const ConversationsList = ({ sessions, currentSession, onSessionChange, onDeleteSession, onNewSession }) => {
   console.log('ConversationsList sessions:', sessions);
   return (
-    <div className="w-80 border-r p-4 bg-gray-800 text-gray-100 relative">
+    <div className="w-80 border-r p-4 bg-blue-100 text-blue-900 relative">
       <h2 className="text-xl font-bold mb-4">Conversations</h2>
       <button
         onClick={onNewSession}

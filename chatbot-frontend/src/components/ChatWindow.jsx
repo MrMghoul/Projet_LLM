@@ -13,7 +13,7 @@ const ChatWindow = ({ messages }) => {
   }, [messages]);
 
   return (
-    <div className="flex-1 overflow-y-auto p-4">
+    <div className="flex-1 overflow-y-auto p-4 bg-blue-50">
       {messages.map((message, index) => (
         <Message
           key={index}

@@ -9,6 +9,7 @@ function App() {
   const [sessions, setSessions] = useState([]);
   const [currentSession, setCurrentSession] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(false);
 
   useEffect(() => {
     loadSessions();
@@ -40,49 +41,6 @@ function App() {
     }
   };
 
-  const handleSendMessage = async (content) => {
-    if (!currentSession) return;
-    setIsLoading(true);
-    try {
-      const response = await chatApi.sendMessage(content, currentSession);
-      console.log('Message sent:', response);
-      setMessages((prev) => [
-        ...prev,
-        { role: 'user', content },
-        { role: 'assistant', content: response.response }
-      ]);
-
-      // Ajouter la nouvelle session à l'état des sessions si elle n'existe pas déjà
-      if (!sessions.includes(currentSession)) {
-        setSessions((prev) => [...prev, currentSession]);
-      }
-    } catch (error) {
-      console.error('Error sending message:', error);
-      // Afficher une notification d'erreur
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleDeleteSession = async (sessionId) => {
-    try {
-      await chatApi.deleteSession(sessionId);
-      setSessions(sessions.filter(session => session !== sessionId));
-      if (currentSession === sessionId) {
-        setCurrentSession(null);
-        setMessages([]);
-      }
-    } catch (error) {
-      console.error('Error deleting session:', error);
-    }
-  };
-
-  const handleNewSession = () => {
-    const newSession = `session-${Date.now()}`;
-    setCurrentSession(newSession);
-    setMessages([]);
-  };
-
   const handleQueryPatientInfo = async (question) => {
     setIsLoading(true);
     try {
@@ -100,9 +58,28 @@ function App() {
     }
   };
 
+  const handleNewSession = () => {
+    const newSession = `session-${Date.now()}`;
+    setCurrentSession(newSession);
+    setMessages([]);
+  };
+
+  const handleDeleteSession = async (sessionId) => {
+    try {
+      await chatApi.deleteSession(sessionId);
+      setSessions(sessions.filter(session => session !== sessionId));
+      if (currentSession === sessionId) {
+        setCurrentSession(null);
+        setMessages([]);
+      }
+    } catch (error) {
+      console.error('Error deleting session:', error);
+    }
+  };
+
   return (
-    <div className="container h-screen overflow-hidden">
-      <div className="flex h-full bg-gray-900 rounded-lg shadow-lg">
+    <div className="container h-screen overflow-hidden medical-theme">
+      <div className="flex h-full bg-white dark:bg-gray-900 rounded-lg shadow-lg">
         <ConversationsList
           sessions={sessions}
           currentSession={currentSession}
@@ -110,33 +87,12 @@ function App() {
           onDeleteSession={handleDeleteSession}
           onNewSession={handleNewSession}
         />
-        <div className="flex-1 flex flex-col bg-gray-800">
+        <div className="flex-1 flex flex-col bg-white dark:bg-gray-800">
+        <div className="header flex justify-between items-center">
+            <h1>Application Médicale</h1>
+          </div>
           <ChatWindow messages={messages} />
-          <MessageInput onSendMessage={handleSendMessage} isLoading={isLoading} />
-          {/* Ajouter un formulaire pour interroger les informations des patients */}
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const question = e.target.question.value;
-              handleQueryPatientInfo(question);
-            }}
-            className="flex gap-2 p-4 border-t"
-          >
-            <input
-              type="text"
-              name="question"
-              placeholder="Question"
-              className="flex-1 rounded-lg border-gray-300 focus:ring-blue-500 focus:border-blue-500 text-black"
-              disabled={isLoading}
-            />
-            <button
-              type="submit"
-              disabled={isLoading}
-              className={`px-4 py-2 rounded-lg bg-blue-500 text-white ${isLoading ? 'opacity-50' : 'hover:bg-blue-600'}`}
-            >
-              {isLoading ? 'Loading...' : 'Query'}
-            </button>
-          </form>
+          <MessageInput onSendMessage={handleQueryPatientInfo} isLoading={isLoading} />
         </div>
       </div>
     </div>
