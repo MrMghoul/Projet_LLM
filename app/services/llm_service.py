@@ -4,6 +4,7 @@ Service principal gérant les interactions avec le modèle de langage
 Compatible avec les fonctionnalités du TP1 et du TP2
 """
 from datetime import datetime
+import logging
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -157,14 +158,52 @@ class LLMService:
 
     async def generate_patient_response(self, patient: Dict[str, Any], question: str) -> str:
         """Génère une réponse basée sur les informations du patient"""
+        
+        encrypted_data = {
+            "date_naissance": patient["date_naissance"],
+            "lieu_residence": patient["lieu_residence"],
+            "contact_urgence": patient["contact_urgence"]
+        }
+        
+        # Pseudonymiser ou masquer les données sensibles avant de les envoyer au LLM
+        pseudonymized_patient = {
+            "nom": patient["nom"],
+            "prenom": patient["prenom"],
+            "date_naissance": "[DATE_NAISSANCE_CHIFFREE]",
+            "lieu_residence": "[LIEU_RESIDENCE_CHIFFRE]",
+            "ville": patient["ville"],
+            "sexe": patient["sexe"],
+            "contact_urgence": "[CONTACT_URGENCE_CHIFFRE]",
+            "poids": patient["poids"],
+            "taille": patient["taille"],
+            "conditions_chroniques": patient["conditions_chroniques"],
+            "allergies": patient["allergies"],
+            "antecedents": patient["antecedents"]
+        }
+
+        logging.info(f"Données patient pseudonymisées : {pseudonymized_patient}")
         messages = [
-            SystemMessage(content="Vous êtes un assistant médical."),
-            HumanMessage(content=f"Voici les informations du patient : {patient}"),
+            SystemMessage(content="Vous êtes un assistant médical. Qui aides des secouriste en leur fournissant des informations sur les patients et les guides pour les premiers secours."),
+            HumanMessage(content=f"Voici les informations du patient : {pseudonymized_patient}"),
             HumanMessage(content=question)
         ]
+
+        logging.info(f"Messages envoyés au LLM : {messages}")
         
         try:
             response = await self.llm.agenerate([messages])
-            return response.generations[0][0].text
+            response_text = response.generations[0][0].text
+
+            logging.info(f"Réponse du LLM crypté : {response_text}")
+
+            #decrypter la reponse avnt de l'envoyer sur swagger 
+            decrypted_response = response_text.replace("[DATE_NAISSANCE_CHIFFREE]", encrypted_data["date_naissance"])
+            decrypted_response = decrypted_response.replace("[LIEU_RESIDENCE_CHIFFRE]", encrypted_data["lieu_residence"])
+            decrypted_response = decrypted_response.replace("[CONTACT_URGENCE_CHIFFRE]", encrypted_data["contact_urgence"])
+
+            logging.info(f"Réponse du LLM décrypté : {decrypted_response}")
+
+            # Décoder ou transformer la réponse si nécessaire
+            return decrypted_response
         except Exception as e:
             raise RuntimeError(f"Erreur lors de la génération de réponse : {e}")
