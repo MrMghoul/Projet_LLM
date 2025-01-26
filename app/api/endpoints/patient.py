@@ -7,6 +7,10 @@ from services.mongo_service import MongoService
 from services.llm_service import LLMService
 from fastapi.responses import JSONResponse
 import re
+from pydantic import BaseModel
+
+class QueryRequest(BaseModel):
+    question: str
 
 router = APIRouter()
 mongo_service = MongoService()
@@ -62,10 +66,10 @@ def extract_name_and_surname(question: str) -> (str, str):
     return None, None
 
 @router.post("/patients/query", response_model=Dict[str, str])
-async def query_patient_info(question: str) -> Dict[str, str]:
+async def query_patient_info(request: QueryRequest) -> Dict[str, str]:
     """Interroge les informations d'un patient par une question et génère une réponse"""
     try:
-        nom, prenom = extract_name_and_surname(question)
+        nom, prenom = extract_name_and_surname(request.question)
         print(f"Nom extrait: {nom}, Prénom extrait: {prenom}")  # Ajout de console.log
 
         if not nom or not prenom:
@@ -82,7 +86,7 @@ async def query_patient_info(question: str) -> Dict[str, str]:
         if not patient:
             raise HTTPException(status_code=404, detail="Patient not found")
         
-        response = await llm_service.generate_patient_response(patient, question)
+        response = await llm_service.generate_patient_response(patient, request.question)
         return {"response": response}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
