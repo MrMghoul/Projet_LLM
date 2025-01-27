@@ -5,6 +5,7 @@ Compatible avec les fonctionnalités du TP1 et du TP2
 """
 from datetime import datetime
 import logging
+from optparse import Option
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -15,6 +16,7 @@ from services.memory import EnhancedMemoryHistory
 from services.chain import SummaryService
 from services.mongo_service import MongoService
 import os
+import spacy
 from typing import List, Dict, Optional, Any
 
 
@@ -34,6 +36,8 @@ class LLMService:
             api_key=api_key
         )
         
+        self.nlp = spacy.load("fr_core_news_md")
+
         # Configuration pour le TP2
         self.conversation_store = {}
         self.prompt = ChatPromptTemplate.from_messages([
@@ -156,7 +160,13 @@ class LLMService:
     async def generate_summary(self, message: str) -> Dict[str, Any]:
         return await self.summary_service.generate_summary(message)
 
-    async def generate_patient_response(self, patient: Dict[str, Any], question: str) -> str:
+    def preprocess_message(self, message: str) -> str:
+        """Prétraite le message en supprimant les mots vides"""
+        doc = self.nlp(message)
+        tokens = [token.text for token in doc if not token.is_stop]
+        return " ".join(tokens)
+    
+    async def generate_patient_response(self, patient: Dict[str, Any], question: str, session_id: Option, history : any) -> str:
         """Génère une réponse basée sur les informations du patient"""
         
         encrypted_data = {
@@ -181,10 +191,17 @@ class LLMService:
             "antecedents": patient["antecedents"]
         }
 
+        preprocessed_question = self.preprocess_message(question)
+        logging.info(f"Question prétraitée : {preprocessed_question}")
+        history_join = " ".join(history)
+        preprocessed_history = self.preprocess_message(history_join)
+        logging.info(f"Historique prétraitée : {preprocessed_history}")
+
         logging.info(f"Données patient pseudonymisées : {pseudonymized_patient}")
         messages = [
-            SystemMessage(content="Vous êtes un assistant médical. Qui aides des secouriste en leur fournissant des informations sur les patients et les guides pour les premiers secours."),
+            SystemMessage(content="Vous êtes un assistant médical. Qui aides et accompagnes les pompiers en leur fournissant des informations sur les patients et les guides pour les premiers secours."),
             HumanMessage(content=f"Voici les informations du patient : {pseudonymized_patient}"),
+            HumanMessage(content=f"Voici l'historique de la conversation afin d'avoir le contexte : {preprocessed_history}"),
             HumanMessage(content=question)
         ]
 
@@ -202,6 +219,11 @@ class LLMService:
             decrypted_response = decrypted_response.replace("[CONTACT_URGENCE_CHIFFRE]", encrypted_data["contact_urgence"])
 
             logging.info(f"Réponse du LLM décrypté : {decrypted_response}")
+
+            if session_id:
+                await self.mongo_service.save_message(session_id, "user", question)
+                await self.mongo_service.save_message(session_id, "assistant", decrypted_response)
+
 
             # Décoder ou transformer la réponse si nécessaire
             return decrypted_response

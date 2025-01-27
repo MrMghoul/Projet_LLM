@@ -86,10 +86,12 @@ function App() {
   const handleQueryPatientInfo = async (question) => {
     setIsLoading(true);
     try {
-      const response = await chatApi.queryPatientInfo(question);
+      const response = await chatApi.queryPatientInfo({ question, session_id: currentSession });
       console.log('Query response:', response);
       setMessages((prev) => [
         ...prev,
+        //{ role: 'user', content: question },
+        //{ role: 'user', content: { question, session_id: currentSession } },
         { role: 'user', content: question },
         { role: 'assistant', content: response.response }
       ]);
