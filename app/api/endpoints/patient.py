@@ -69,16 +69,13 @@ def extract_name_and_surname(question: str) -> (str, str):
 
 
 @router.post("/patients/query", response_model=Dict[str, str])
-async def query_patient_info(request: QueryRequest) -> Dict[str, str]:
+async def query_patient_info(request: QueryRequest, session_id: Optional[str] = None) -> Dict[str, str]:
     """Interroge les informations d'un patient par une question et génère une réponse"""
     try:
         nom, prenom = extract_name_and_surname(request.question)
-        print(f"Nom extrait: {nom}, Prénom extrait: {prenom}")  # Ajout de console.log
-
         if not nom or not prenom:
             raise HTTPException(status_code=400, detail="Nom et prénom non trouvés dans la question")
         
-        # Essayer de trouver le patient avec le nom et prénom extraits
         patient = await mongo_service.get_patient_by_name(nom, prenom)
 
         # Essayer de trouver la conversation avec le session_id
@@ -86,7 +83,6 @@ async def query_patient_info(request: QueryRequest) -> Dict[str, str]:
         
         # Si le patient n'est pas trouvé, inverser le nom et le prénom et refaire la recherche
         if not patient:
-            print(f"Patient non trouvé avec {nom} {prenom}, tentative avec {prenom} {nom}")  # Ajout de console.log
             patient = await mongo_service.get_patient_by_name(prenom, nom)
         
         if not patient:

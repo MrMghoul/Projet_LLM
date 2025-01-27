@@ -19,6 +19,7 @@ from services.mongo_service import MongoService
 import os
 import spacy
 from typing import List, Dict, Optional, Any
+import uuid
 
 
 class LLMService:
@@ -27,6 +28,7 @@ class LLMService:
     """
     def __init__(self):
         api_key = os.getenv("OPENAI_API_KEY")
+        model="gpt-4o"
         if not api_key:
             raise ValueError("OPENAI_API_KEY n'est pas définie")
         
@@ -78,11 +80,11 @@ class LLMService:
     async def process_with_tools(self, query: str) -> str:
         return await self.tools.process_request(query)
 
+
     async def generate_response(self, 
-                            message: str, 
-                            context: Optional[List[Dict[str, str]]] = None,
-                            session_id: Optional[str] = None) -> str:
-        
+                                message: str, 
+                                context: Optional[List[Dict[str, str]]] = None,
+                                session_id: Optional[str] = None) -> str:
         if session_id:
             # Mode TP2 avec historique, récupération depuis MongoDB
             try:
@@ -104,8 +106,8 @@ class LLMService:
                 response_text = response.generations[0][0].text
 
                 # Sauvegarde des messages dans MongoDB
-                await self.mongo_service.save_message(session_id, "user", message)
-                await self.mongo_service.save_message(session_id, "assistant", response_text)
+                await self.save_message_to_db(session_id, "user", message)
+                await self.save_message_to_db(session_id, "assistant", response_text)
                 return response_text
 
             except Exception as e:
@@ -127,14 +129,25 @@ class LLMService:
             # Génération de la réponse sans historique MongoDB
             try:
                 response = await self.llm.agenerate([messages])
-                return response.generations[0][0].text
+                response_text = response.generations[0][0].text
+
+                # Générer un nouvel ID de session si non fourni
+                if not session_id:
+                    session_id = str(uuid.uuid4())
+                
+                # Sauvegarde des messages dans MongoDB
+                await self.save_message_to_db(session_id, "user", message)
+                await self.save_message_to_db(session_id, "assistant", response_text)
+                return response_text
             except Exception as e:
                 raise RuntimeError(f"Erreur lors de la génération de réponse : {e}")
 
     async def get_conversation_history(self, session_id: str) -> List[Dict]:
         """Récupère l'historique d'une conversation"""
-        return await self.mongo_service.get_conversation_history(session_id)
-    
+        history = await self.mongo_service.get_conversation_history(session_id)
+        logging.info(f"Historique récupéré pour la session {session_id}: {history}")
+        return history
+
     async def get_all_sessions(self) -> List[str]:
         """Récupère toutes les sessions depuis MongoDB"""
         return await self.mongo_service.get_all_sessions()
@@ -233,7 +246,7 @@ class LLMService:
 
             logging.info(f"Réponse du LLM crypté : {response_text}")
 
-            #decrypter la reponse avnt de l'envoyer sur swagger 
+            # Décrypter la réponse avant de l'envoyer sur Swagger 
             decrypted_response = response_text.replace("[DATE_NAISSANCE_CHIFFREE]", encrypted_data["date_naissance"])
             decrypted_response = decrypted_response.replace("[LIEU_RESIDENCE_CHIFFRE]", encrypted_data["lieu_residence"])
             decrypted_response = decrypted_response.replace("[CONTACT_URGENCE_CHIFFRE]", encrypted_data["contact_urgence"])
@@ -248,4 +261,4 @@ class LLMService:
             # Décoder ou transformer la réponse si nécessaire
             return decrypted_response
         except Exception as e:
-            raise RuntimeError(f"Erreur lors de la génération de réponse : {e}")
+            raise RuntimeError(f"Erreur lors de la génération de réponse pour le patient : {e}")
