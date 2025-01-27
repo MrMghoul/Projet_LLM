@@ -86,7 +86,9 @@ async def query_patient_info(request: QueryRequest) -> Dict[str, str]:
         if not patient:
             raise HTTPException(status_code=404, detail="Patient not found")
         
-        response = await llm_service.generate_patient_response(patient, request.question)
+        preprocessed_question = llm_service.preprocess_message(request.question)
+        
+        response = await llm_service.generate_patient_response(patient, preprocessed_question)
         return {"response": response}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -15,6 +15,7 @@ from services.memory import EnhancedMemoryHistory
 from services.chain import SummaryService
 from services.mongo_service import MongoService
 import os
+import spacy
 from typing import List, Dict, Optional, Any
 
 
@@ -34,6 +35,8 @@ class LLMService:
             api_key=api_key
         )
         
+        self.nlp = spacy.load("fr_core_news_md")
+
         # Configuration pour le TP2
         self.conversation_store = {}
         self.prompt = ChatPromptTemplate.from_messages([
@@ -156,6 +159,12 @@ class LLMService:
     async def generate_summary(self, message: str) -> Dict[str, Any]:
         return await self.summary_service.generate_summary(message)
 
+    def preprocess_message(self, message: str) -> str:
+        """Prétraite le message en supprimant les mots vides"""
+        doc = self.nlp(message)
+        tokens = [token.text for token in doc if not token.is_stop]
+        return " ".join(tokens)
+    
     async def generate_patient_response(self, patient: Dict[str, Any], question: str) -> str:
         """Génère une réponse basée sur les informations du patient"""
         
@@ -181,9 +190,12 @@ class LLMService:
             "antecedents": patient["antecedents"]
         }
 
+        preprocessed_question = self.preprocess_message(question)
+        logging.info(f"Question prétraitée : {preprocessed_question}")
+
         logging.info(f"Données patient pseudonymisées : {pseudonymized_patient}")
         messages = [
-            SystemMessage(content="Vous êtes un assistant médical. Qui aides des secouriste en leur fournissant des informations sur les patients et les guides pour les premiers secours."),
+            SystemMessage(content="Vous êtes un assistant médical. Qui aides et accompagnes les pompiers en leur fournissant des informations sur les patients et les guides pour les premiers secours."),
             HumanMessage(content=f"Voici les informations du patient : {pseudonymized_patient}"),
             HumanMessage(content=question)
         ]
