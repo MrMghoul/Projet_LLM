@@ -21,9 +21,21 @@ export const chatApi = {
     const response = await axios.delete(`${API_URL}/chat/sessions/${sessionId}`);
     return response.data;
   },
-  queryPatientInfo: async (question) => {
+  queryPatientInfo: async ({ question, session_id }) => {
     const response = await axios.post(`${API_URL}/patient/patients/query`, {
-      question: question
+      question: question,
+      session_id: session_id
+    });
+    return response.data;
+  },
+  createSession: async () => {
+    const response = await axios.post(`${API_URL}/memory/session/create`);
+    return response.data;
+  },
+  saveMessage: async (sessionId, role, content) => {
+    const response = await axios.post(`${API_URL}/memory/session/${sessionId}/add_message`, {
+      message: content,
+      role: role
     });
     return response.data;
   }

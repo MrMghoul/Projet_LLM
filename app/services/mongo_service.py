@@ -1,10 +1,10 @@
-from motor.motor_asyncio import AsyncIOMotorClient
+import logging
 from datetime import datetime
-from typing import Any, List, Dict, Optional
+from typing import List, Dict, Optional
+from motor.motor_asyncio import AsyncIOMotorClient
+from bson import ObjectId
 from models.conversation import Conversation, Message
 from core.config import settings
-import logging
-from bson import ObjectId
 
 class MongoService:
     def __init__(self):
@@ -15,6 +15,7 @@ class MongoService:
     async def save_message(self, session_id: str, role: str, content: str) -> bool:
         """Sauvegarde un nouveau message dans une conversation"""
         message = Message(role=role, content=content)
+        logging.info(f"Tentative de sauvegarde du message pour la session {session_id}: {message}")
         result = await self.conversations.update_one(
             {"session_id": session_id},
             {
@@ -24,10 +25,16 @@ class MongoService:
             },
             upsert=True
         )
-        return result.modified_count > 0 or result.upserted_id is not None
+        success = result.modified_count > 0 or result.upserted_id is not None
+        if success:
+            logging.info(f"Message sauvegardé pour la session {session_id}: {message}")
+        else:
+            logging.error(f"Échec de la sauvegarde du message pour la session {session_id}: {message}")
+        return success
 
     async def get_conversation_history(self, session_id: str) -> List[Dict]:
         """Récupère l'historique d'une conversation"""
+        logging.info(f"Tentative de récupération de l'historique pour la session {session_id}")
         conversation = await self.conversations.find_one({"session_id": session_id})
         if conversation:
             logging.info(f"Conversation trouvée: {conversation}")
@@ -78,3 +85,9 @@ class MongoService:
         if patient:
             patient["_id"] = str(patient["_id"])
         return patient
+    
+    async def create_session(self, session_id: str) -> bool:
+        """Crée une nouvelle session"""
+        conversation = Conversation(session_id=session_id)
+        result = await self.conversations.insert_one(conversation.model_dump())
+        return result.inserted_id is not None

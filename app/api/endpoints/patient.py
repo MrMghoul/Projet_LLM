@@ -1,7 +1,7 @@
 import re
 import spacy
 from fastapi import APIRouter, HTTPException
-from typing import List, Dict
+from typing import List, Dict, Optional
 from models.patient import Patient
 from services.mongo_service import MongoService
 from services.llm_service import LLMService
@@ -66,27 +66,30 @@ def extract_name_and_surname(question: str) -> (str, str):
     return None, None
 
 @router.post("/patients/query", response_model=Dict[str, str])
-async def query_patient_info(request: QueryRequest) -> Dict[str, str]:
+async def query_patient_info(request: QueryRequest, session_id: Optional[str] = None) -> Dict[str, str]:
     """Interroge les informations d'un patient par une question et génère une réponse"""
     try:
         nom, prenom = extract_name_and_surname(request.question)
-        print(f"Nom extrait: {nom}, Prénom extrait: {prenom}")  # Ajout de console.log
-
         if not nom or not prenom:
             raise HTTPException(status_code=400, detail="Nom et prénom non trouvés dans la question")
         
-        # Essayer de trouver le patient avec le nom et prénom extraits
         patient = await mongo_service.get_patient_by_name(nom, prenom)
-        
-        # Si le patient n'est pas trouvé, inverser le nom et le prénom et refaire la recherche
         if not patient:
-            print(f"Patient non trouvé avec {nom} {prenom}, tentative avec {prenom} {nom}")  # Ajout de console.log
             patient = await mongo_service.get_patient_by_name(prenom, nom)
         
         if not patient:
             raise HTTPException(status_code=404, detail="Patient not found")
         
-        response = await llm_service.generate_patient_response(patient, request.question)
+        # Sauvegarder le message de l'utilisateur dans MongoDB
+        if session_id:
+            await llm_service.save_message_to_db(session_id, "user", request.question)
+        
+        response = await llm_service.generate_patient_response(patient, request.question, session_id)
+        
+        # Sauvegarder la réponse générée dans MongoDB
+        if session_id:
+            await llm_service.save_message_to_db(session_id, "assistant", response)
+        
         return {"response": response}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

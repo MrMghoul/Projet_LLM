@@ -41,21 +41,22 @@ function App() {
   };
 
   const handleSendMessage = async (content) => {
-    if (!currentSession) return;
+    let sessionId = currentSession;
+    if (!sessionId) {
+      const response = await chatApi.createSession();
+      sessionId = response.session_id;
+      setCurrentSession(sessionId);
+      setSessions((prev) => [...prev, sessionId]); // Ajouter la nouvelle session immédiatement
+    }
     setIsLoading(true);
     try {
-      const response = await chatApi.sendMessage(content, currentSession);
+      const response = await chatApi.sendMessage(content, sessionId);
       console.log('Message sent:', response);
       setMessages((prev) => [
         ...prev,
         { role: 'user', content },
         { role: 'assistant', content: response.response }
       ]);
-
-      // Ajouter la nouvelle session à l'état des sessions si elle n'existe pas déjà
-      if (!sessions.includes(currentSession)) {
-        setSessions((prev) => [...prev, currentSession]);
-      }
     } catch (error) {
       console.error('Error sending message:', error);
       // Afficher une notification d'erreur
@@ -77,22 +78,44 @@ function App() {
     }
   };
 
-  const handleNewSession = () => {
-    const newSession = `session-${Date.now()}`;
-    setCurrentSession(newSession);
-    setMessages([]);
+  const handleNewSession = async () => {
+    try {
+      const response = await chatApi.createSession();
+      const newSession = response.session_id;
+      setCurrentSession(newSession);
+      setMessages([]);
+      setSessions((prev) => [...prev, newSession]); // Ajouter la nouvelle session immédiatement
+    } catch (error) {
+      console.error('Error creating new session:', error);
+    }
   };
 
   const handleQueryPatientInfo = async (question) => {
     setIsLoading(true);
+    let sessionId = currentSession;
     try {
-      const response = await chatApi.queryPatientInfo(question);
+      // Créer une session si elle n'existe pas déjà
+      if (!sessionId) {
+        const response = await chatApi.createSession();
+        sessionId = response.session_id;
+        setCurrentSession(sessionId);
+        setSessions((prev) => [...prev, sessionId]); // Ajouter la nouvelle session immédiatement
+      }
+  
+      // Envoyer la question et obtenir la réponse
+      const response = await chatApi.queryPatientInfo({ question, session_id: sessionId });
       console.log('Query response:', response);
+  
+      // Mettre à jour les messages dans l'état
       setMessages((prev) => [
         ...prev,
         { role: 'user', content: question },
         { role: 'assistant', content: response.response }
       ]);
+  
+      // Sauvegarder les messages dans MongoDB
+      await chatApi.saveMessage(sessionId, 'user', question);
+      await chatApi.saveMessage(sessionId, 'assistant', response.response);
     } catch (error) {
       console.error('Error querying patient info:', error);
     } finally {
@@ -112,8 +135,7 @@ function App() {
         />
         <div className="flex-1 flex flex-col bg-gray-800">
           <ChatWindow messages={messages} />
-          <MessageInput onQueryPatientInfo={handleQueryPatientInfo}
-          isLoading={isLoading} />
+          <MessageInput onQueryPatientInfo={handleQueryPatientInfo} isLoading={isLoading} />
           {/* Ajouter un formulaire pour interroger les informations des patients */}
         </div>
       </div>

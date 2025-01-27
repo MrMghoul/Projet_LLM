@@ -15,7 +15,9 @@ from services.memory import EnhancedMemoryHistory
 from services.chain import SummaryService
 from services.mongo_service import MongoService
 import os
+import spacy
 from typing import List, Dict, Optional, Any
+import uuid
 
 
 class LLMService:
@@ -23,7 +25,8 @@ class LLMService:
     Service LLM unifié supportant à la fois les fonctionnalités du TP1 et du TP2
     """
     def __init__(self):
-        api_key = os.getenv("OPENAI_API_KEY")
+        api_key = os.getenv("OPENAI_API_KEY"),
+        model="gpt-4o"
         if not api_key:
             raise ValueError("OPENAI_API_KEY n'est pas définie")
         
@@ -34,6 +37,8 @@ class LLMService:
             api_key=api_key
         )
         
+        self.nlp = spacy.load("fr_core_news_md")
+
         # Configuration pour le TP2
         self.conversation_store = {}
         self.prompt = ChatPromptTemplate.from_messages([
@@ -73,11 +78,11 @@ class LLMService:
     async def process_with_tools(self, query: str) -> str:
         return await self.tools.process_request(query)
 
+
     async def generate_response(self, 
-                            message: str, 
-                            context: Optional[List[Dict[str, str]]] = None,
-                            session_id: Optional[str] = None) -> str:
-        
+                                message: str, 
+                                context: Optional[List[Dict[str, str]]] = None,
+                                session_id: Optional[str] = None) -> str:
         if session_id:
             # Mode TP2 avec historique, récupération depuis MongoDB
             try:
@@ -99,8 +104,8 @@ class LLMService:
                 response_text = response.generations[0][0].text
 
                 # Sauvegarde des messages dans MongoDB
-                await self.mongo_service.save_message(session_id, "user", message)
-                await self.mongo_service.save_message(session_id, "assistant", response_text)
+                await self.save_message_to_db(session_id, "user", message)
+                await self.save_message_to_db(session_id, "assistant", response_text)
                 return response_text
 
             except Exception as e:
@@ -122,14 +127,25 @@ class LLMService:
             # Génération de la réponse sans historique MongoDB
             try:
                 response = await self.llm.agenerate([messages])
-                return response.generations[0][0].text
+                response_text = response.generations[0][0].text
+
+                # Générer un nouvel ID de session si non fourni
+                if not session_id:
+                    session_id = str(uuid.uuid4())
+                
+                # Sauvegarde des messages dans MongoDB
+                await self.save_message_to_db(session_id, "user", message)
+                await self.save_message_to_db(session_id, "assistant", response_text)
+                return response_text
             except Exception as e:
                 raise RuntimeError(f"Erreur lors de la génération de réponse : {e}")
 
     async def get_conversation_history(self, session_id: str) -> List[Dict]:
         """Récupère l'historique d'une conversation"""
-        return await self.mongo_service.get_conversation_history(session_id)
-    
+        history = await self.mongo_service.get_conversation_history(session_id)
+        logging.info(f"Historique récupéré pour la session {session_id}: {history}")
+        return history
+
     async def get_all_sessions(self) -> List[str]:
         """Récupère toutes les sessions depuis MongoDB"""
         return await self.mongo_service.get_all_sessions()
@@ -156,8 +172,18 @@ class LLMService:
     async def generate_summary(self, message: str) -> Dict[str, Any]:
         return await self.summary_service.generate_summary(message)
 
-    async def generate_patient_response(self, patient: Dict[str, Any], question: str) -> str:
-        """Génère une réponse basée sur les informations du patient"""
+    def preprocess_message(self, message: str) -> str:
+        """Prétraite le message en supprimant les mots vides"""
+        doc = self.nlp(message)
+        tokens = [token.text for token in doc if not token.is_stop]
+        return " ".join(tokens)
+
+    async def save_message_to_db(self, session_id: str, role: str, content: str) -> None:
+        """Sauvegarde un message dans MongoDB"""
+        await self.mongo_service.save_message(session_id, role, content)
+
+    async def generate_patient_response(self, patient: Dict[str, Any], question: str, session_id: Optional[str] = None) -> str:
+        """Génère une réponse basée sur les informations du patient et gère l'historique"""
         
         encrypted_data = {
             "date_naissance": patient["date_naissance"],
@@ -181,9 +207,12 @@ class LLMService:
             "antecedents": patient["antecedents"]
         }
 
+        preprocessed_question = self.preprocess_message(question)
+        logging.info(f"Question prétraitée : {preprocessed_question}")
+
         logging.info(f"Données patient pseudonymisées : {pseudonymized_patient}")
         messages = [
-            SystemMessage(content="Vous êtes un assistant médical. Qui aides des secouriste en leur fournissant des informations sur les patients et les guides pour les premiers secours."),
+            SystemMessage(content="Vous êtes un assistant médical. Qui aides et accompagnes les pompiers en leur fournissant des informations sur les patients et les guides pour les premiers secours."),
             HumanMessage(content=f"Voici les informations du patient : {pseudonymized_patient}"),
             HumanMessage(content=question)
         ]
@@ -196,14 +225,18 @@ class LLMService:
 
             logging.info(f"Réponse du LLM crypté : {response_text}")
 
-            #decrypter la reponse avnt de l'envoyer sur swagger 
+            # Décrypter la réponse avant de l'envoyer sur Swagger 
             decrypted_response = response_text.replace("[DATE_NAISSANCE_CHIFFREE]", encrypted_data["date_naissance"])
             decrypted_response = decrypted_response.replace("[LIEU_RESIDENCE_CHIFFRE]", encrypted_data["lieu_residence"])
             decrypted_response = decrypted_response.replace("[CONTACT_URGENCE_CHIFFRE]", encrypted_data["contact_urgence"])
 
             logging.info(f"Réponse du LLM décrypté : {decrypted_response}")
 
+            if session_id:
+                await self.save_message_to_db(session_id, "user", question)
+                await self.save_message_to_db(session_id, "assistant", decrypted_response)
+
             # Décoder ou transformer la réponse si nécessaire
             return decrypted_response
         except Exception as e:
-            raise RuntimeError(f"Erreur lors de la génération de réponse : {e}")
+            raise RuntimeError(f"Erreur lors de la génération de réponse pour le patient : {e}")
