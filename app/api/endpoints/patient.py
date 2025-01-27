@@ -1,7 +1,7 @@
 import re
 import spacy
 from fastapi import APIRouter, HTTPException
-from typing import List, Dict
+from typing import List, Dict, Optional
 from models.patient import Patient
 from services.mongo_service import MongoService
 from services.llm_service import LLMService
@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 class QueryRequest(BaseModel):
     question: str
+    session_id: Optional[str] = None
 
 router = APIRouter()
 mongo_service = MongoService()
@@ -77,6 +78,9 @@ async def query_patient_info(request: QueryRequest) -> Dict[str, str]:
         
         # Essayer de trouver le patient avec le nom et prénom extraits
         patient = await mongo_service.get_patient_by_name(nom, prenom)
+
+        # Essayer de trouver la conversation avec le session_id
+        history = await mongo_service.get_conversation_history(request.session_id)
         
         # Si le patient n'est pas trouvé, inverser le nom et le prénom et refaire la recherche
         if not patient:
@@ -87,8 +91,16 @@ async def query_patient_info(request: QueryRequest) -> Dict[str, str]:
             raise HTTPException(status_code=404, detail="Patient not found")
         
         preprocessed_question = llm_service.preprocess_message(request.question)
+        #print("\n history : \n")
+        #print(history)
+        #preprocesses_history = [llm_service.preprocess_message(messages) for messages in history]
+        #preprocesses_history = [llm_service.preprocess_message(messages["content"]) for messages in history]
+        preprocesses_history = [llm_service.preprocess_message(messages["content"]) for messages in history[-10:]]
+        #print("\n preprocesses_history : \n")
+        #print(preprocesses_history)
+        #response = await llm_service.generate_patient_response(patient, preprocessed_question, request.session_id)
+        response = await llm_service.generate_patient_response(patient, preprocessed_question, request.session_id, preprocesses_history)
         
-        response = await llm_service.generate_patient_response(patient, preprocessed_question)
         return {"response": response}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

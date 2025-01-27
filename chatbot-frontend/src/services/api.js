@@ -21,10 +21,16 @@ export const chatApi = {
     const response = await axios.delete(`${API_URL}/chat/sessions/${sessionId}`);
     return response.data;
   },
-  queryPatientInfo: async (question) => {
-    const response = await axios.post(`${API_URL}/patient/patients/query`, {
-      question: question
-    });
+  /*queryPatientInfo: async (question, session_id) => {
+    const response = await axios.post(`${API_URL}/patient/patients/query`,
+      { question : question , 
+        session_id : session_id
+      }
+    );*/
+    queryPatientInfo: async (question, session_id) => {
+      const response = await axios.post(`${API_URL}/patient/patients/query`,
+        question
+      );
     return response.data;
   }
 };
