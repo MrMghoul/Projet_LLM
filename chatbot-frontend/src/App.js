@@ -79,30 +79,32 @@ function App() {
   };
 
   const handleNewSession = async () => {
+    console.log('Creating new session...');
     try {
       const response = await chatApi.createSession();
       const newSession = response.session_id;
       setCurrentSession(newSession);
-      setMessages([]);
+      setMessages([]); // Réinitialiser les messages pour la nouvelle session
       setSessions((prev) => [...prev, newSession]); // Ajouter la nouvelle session immédiatement
+  
+      // Sauvegarder la session vide dans MongoDB
+      await chatApi.saveMessage(newSession, 'system', 'Session créée');
+      console.log('New session created:', newSession);
     } catch (error) {
       console.error('Error creating new session:', error);
     }
   };
-
+  
   const handleQueryPatientInfo = async (question) => {
     setIsLoading(true);
     let sessionId = currentSession;
+    if (!sessionId) {
+      const response = await chatApi.createSession();
+      sessionId = response.session_id;
+      setCurrentSession(sessionId);
+      setSessions((prev) => [...prev, sessionId]); // Ajouter la nouvelle session immédiatement
+    }
     try {
-      // Créer une session si elle n'existe pas déjà
-      if (!sessionId) {
-        const response = await chatApi.createSession();
-        sessionId = response.session_id;
-        setCurrentSession(sessionId);
-        setSessions((prev) => [...prev, sessionId]); // Ajouter la nouvelle session immédiatement
-      }
-  
-      // Envoyer la question et obtenir la réponse
       const response = await chatApi.queryPatientInfo({ question, session_id: sessionId });
       console.log('Query response:', response);
   
@@ -122,7 +124,6 @@ function App() {
       setIsLoading(false);
     }
   };
-
   return (
     <div className="container h-screen overflow-hidden">
       <div className="flex h-full bg-gray-900 rounded-lg shadow-lg">
@@ -135,7 +136,7 @@ function App() {
         />
         <div className="flex-1 flex flex-col bg-gray-800">
           <ChatWindow messages={messages} />
-          <MessageInput onQueryPatientInfo={handleQueryPatientInfo} isLoading={isLoading} />
+          <MessageInput onQueryPatientInfo={handleQueryPatientInfo} isLoading={isLoading} />          
           {/* Ajouter un formulaire pour interroger les informations des patients */}
         </div>
       </div>

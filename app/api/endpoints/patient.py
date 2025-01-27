@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 class QueryRequest(BaseModel):
     question: str
+    session_id: Optional[str] = None
 
 router = APIRouter()
 mongo_service = MongoService()
@@ -74,21 +75,27 @@ async def query_patient_info(request: QueryRequest, session_id: Optional[str] = 
             raise HTTPException(status_code=400, detail="Nom et prénom non trouvés dans la question")
         
         patient = await mongo_service.get_patient_by_name(nom, prenom)
+
+        # Essayer de trouver la conversation avec le session_id
+        history = await mongo_service.get_conversation_history(request.session_id)
+        
+        # Si le patient n'est pas trouvé, inverser le nom et le prénom et refaire la recherche
         if not patient:
             patient = await mongo_service.get_patient_by_name(prenom, nom)
         
         if not patient:
             raise HTTPException(status_code=404, detail="Patient not found")
         
-        # Sauvegarder le message de l'utilisateur dans MongoDB
-        if session_id:
-            await llm_service.save_message_to_db(session_id, "user", request.question)
-        
-        response = await llm_service.generate_patient_response(patient, request.question, session_id)
-        
-        # Sauvegarder la réponse générée dans MongoDB
-        if session_id:
-            await llm_service.save_message_to_db(session_id, "assistant", response)
+        preprocessed_question = llm_service.preprocess_message(request.question)
+        #print("\n history : \n")
+        #print(history)
+        #preprocesses_history = [llm_service.preprocess_message(messages) for messages in history]
+        #preprocesses_history = [llm_service.preprocess_message(messages["content"]) for messages in history]
+        preprocesses_history = [llm_service.preprocess_message(messages["content"]) for messages in history[-10:]]
+        #print("\n preprocesses_history : \n")
+        #print(preprocesses_history)
+        #response = await llm_service.generate_patient_response(patient, preprocessed_question, request.session_id)
+        response = await llm_service.generate_patient_response(patient, preprocessed_question, request.session_id, preprocesses_history)
         
         return {"response": response}
     except Exception as e:
