@@ -6,6 +6,7 @@ Compatible avec les fonctionnalités du TP1 et du TP2
 from datetime import datetime
 import logging
 from optparse import Option
+import re
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -166,6 +167,25 @@ class LLMService:
         tokens = [token.text for token in doc if not token.is_stop]
         return " ".join(tokens)
     
+    def pseudonymize_message(self, message: str, patient: Dict[str, Any]) -> str:
+        """Pseudonymise les données sensibles dans un message"""
+        pseudonymized_message = message
+        sensitive_data = {
+            patient["date_naissance"]: "[DATE_NAISSANCE_CHIFFREE]",
+            patient["lieu_residence"]: "[LIEU_RESIDENCE_CHIFFRE]",
+            patient["contact_urgence"]: "[CONTACT_URGENCE_CHIFFRE]"
+        }
+        
+        # Remplacer les données sensibles spécifiques
+        for data, pseudonym in sensitive_data.items():
+            pseudonymized_message = pseudonymized_message.replace(data, pseudonym)
+        
+        # Remplacer les dates au format jour mois année (ex: 14 mai 1990)
+        date_pattern = r'\b\d{1,2} \w+ \d{4}\b'
+        pseudonymized_message = re.sub(date_pattern, '[DATE_NAISSANCE_CHIFFREE]', pseudonymized_message)
+        
+        return pseudonymized_message
+
     async def generate_patient_response(self, patient: Dict[str, Any], question: str, session_id: Option, history : any) -> str:
         """Génère une réponse basée sur les informations du patient"""
         

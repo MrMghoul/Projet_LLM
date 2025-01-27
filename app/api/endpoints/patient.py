@@ -1,7 +1,7 @@
 import re
 import spacy
 from fastapi import APIRouter, HTTPException
-from typing import List, Dict, Optional
+from typing import Any, List, Dict, Optional
 from models.patient import Patient
 from services.mongo_service import MongoService
 from services.llm_service import LLMService
@@ -66,6 +66,8 @@ def extract_name_and_surname(question: str) -> (str, str):
         return names[0].capitalize(), names[1].capitalize()
     return None, None
 
+
+
 @router.post("/patients/query", response_model=Dict[str, str])
 async def query_patient_info(request: QueryRequest) -> Dict[str, str]:
     """Interroge les informations d'un patient par une question et génère une réponse"""
@@ -95,7 +97,8 @@ async def query_patient_info(request: QueryRequest) -> Dict[str, str]:
         #print(history)
         #preprocesses_history = [llm_service.preprocess_message(messages) for messages in history]
         #preprocesses_history = [llm_service.preprocess_message(messages["content"]) for messages in history]
-        preprocesses_history = [llm_service.preprocess_message(messages["content"]) for messages in history[-10:]]
+        pseudonymized_history = [llm_service.pseudonymize_message(messages["content"], patient) for messages in history[-10:]]
+        preprocesses_history = [llm_service.preprocess_message(message) for message in pseudonymized_history]
         #print("\n preprocesses_history : \n")
         #print(preprocesses_history)
         #response = await llm_service.generate_patient_response(patient, preprocessed_question, request.session_id)
