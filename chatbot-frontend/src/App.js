@@ -124,6 +124,7 @@ function App() {
       setIsLoading(false);
     }
   };
+
   return (
     <div className="container h-screen overflow-hidden">
       <div className="flex h-full bg-gray-900 rounded-lg shadow-lg">
@@ -135,6 +136,9 @@ function App() {
           onNewSession={handleNewSession}
         />
         <div className="flex-1 flex flex-col bg-gray-800">
+          <header className="bg-blue-250 text-white p-3">
+            <h1 className="text-xl font-bold">Application Médical</h1>
+          </header>
           <ChatWindow messages={messages} />
           <MessageInput onQueryPatientInfo={handleQueryPatientInfo} isLoading={isLoading} />          
           {/* Ajouter un formulaire pour interroger les informations des patients */}
